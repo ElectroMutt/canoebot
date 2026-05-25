@@ -1,11 +1,23 @@
-import { Client, Collection, Events, GatewayIntentBits } from "discord.js";
-import { readdirSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
 import "dotenv/config";
-import { initDb } from "./db.js";
+import {
+  Client,
+  GatewayIntentBits,
+  Collection,
+  ActivityType,
+  Events,
+} from "discord.js";
+import path from "path";
+import { fileURLToPath, pathToFileURL } from "url";
+import fs from "fs";
+import { handleMemberJoin } from "./events/memberJoin.js";
+import {
+  handleReactionAdd,
+  handleReactionRemove,
+} from "./events/reactions.js";
+import { startSongPostTask, startMemeTask } from "./scheduledTasks.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const client = new Client({
   intents: [
@@ -16,49 +28,81 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
   ],
 });
-
-// load slash commands
 client.commands = new Collection();
-const commandFiles = readdirSync(join(__dirname, "commands")).filter((f) =>
-  f.endsWith(".js"),
-);
+const commandsPath = path.join(__dirname, "commands");
+const commandFiles = fs
+  .readdirSync(commandsPath)
+  .filter((file) => file.endsWith(".js"));
+
 for (const file of commandFiles) {
-  const command = await import(join(__dirname, "commands", file));
-  client.commands.set(command.data.name, command);
+  const filePath = pathToFileURL(path.join(commandsPath, file)).href;
+  const command = await import(filePath);
+  if ("data" in command.default && "execute" in command.default) {
+    client.commands.set(command.default.data.name, command.default);
+  }
 }
+const memeChannelId = process.env.MEME_CHANNEL_ID;
 
-// load event handlers
-const eventFiles = readdirSync(join(__dirname, "events")).filter((f) =>
-  f.endsWith(".js"),
-);
-for (const file of eventFiles) {
-  const event = await import(join(__dirname, "events", file));
-  const fn = (...args) => event.execute(...args, client);
-  event.once ? client.once(event.name, fn) : client.on(event.name, fn);
-}
-
-client.once(Events.ClientReady, async (c) => {
-  await initDb();
-  console.log(`✅ Logged in as ${c.user.tag}`);
+client.once(Events.ClientReady, async () => {
+  console.log(`${client.user.tag} be online!`);
+  let members = 0;
+  for (const guild of client.guilds.cache.values()) {
+    members += guild.memberCount - 1;
+  }
+  client.user.setPresence({
+    activities: [
+      {
+        type: ActivityType.Watching,
+        name: `⛵ ${members} members in the rapids...`,
+        // What a wonderful place!
+      },
+    ],
+  });
+  startSongPostTask(client);
+  startMemeTask(client);
 });
-
+client.on(Events.GuildMemberAdd, async (member) => {
+  await handleMemberJoin(member, client);
+});
 client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
+  if (interaction.isAutocomplete()) {
+    const command = client.commands.get(interaction.commandName);
+    if (!command || !command.autocomplete) return;
 
-  const command = client.commands.get(interaction.commandName);
-  if (!command) return;
+    try {
+      await command.autocomplete(interaction);
+    } catch (error) {
+      console.error("❌ Autocomplete error:", error);
+    }
+  } else if (interaction.isChatInputCommand()) {
+    const command = client.commands.get(interaction.commandName);
+    if (!command) return;
 
-  try {
-    await command.execute(interaction);
-  } catch (err) {
-    console.error(err);
-    const reply = { content: "Something went wrong.", ephemeral: true };
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp(reply);
-    } else {
-      await interaction.reply(reply);
+    try {
+      await command.execute(interaction, client);
+    } catch (error) {
+      console.error("❌ Execution error:", error);
+      const reply = {
+        content: "Ay mate, there was an unknown error executing this command.",
+        ephemeral: true,
+      };
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp(reply);
+      } else {
+        await interaction.reply(reply);
+      }
     }
   }
 });
 
+client.on(Events.MessageCreate, async (message) => {
+  if (message.author.bot) return;
+  if (message.channel.id === memeChannelId && message.attachments.size > 0) {
+    await message.react("🔺");
+  }
+});
+// lovely red triangle
+
+client.on(Events.MessageReactionAdd, handleReactionAdd);
+client.on(Events.MessageReactionRemove, handleReactionRemove);
 client.login(process.env.TOKEN);

@@ -1,27 +1,41 @@
-import { REST, Routes } from 'discord.js'
-import { readdirSync } from 'fs'
-import { join, dirname } from 'path'
-import { fileURLToPath } from 'url'
-import 'dotenv/config'
+// publish commands to discord
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
+import { REST, Routes } from "discord.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath, pathToFileURL } from "url";
+import "dotenv/config";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const commands = []
-const commandFiles = readdirSync(join(__dirname, 'commands')).filter(f => f.endsWith('.js'))
+const commands = [];
+const commandsPath = path.join(__dirname, "commands");
+const commandFiles = fs
+  .readdirSync(commandsPath)
+  .filter((file) => file.endsWith(".js"));
+
 for (const file of commandFiles) {
-  const { data } = await import(join(__dirname, 'commands', file))
-  commands.push(data.toJSON())
+  const filePath = pathToFileURL(path.join(commandsPath, file)).href;
+  const command = await import(filePath);
+  if ("data" in command.default && "execute" in command.default) {
+    commands.push(command.default.data.toJSON());
+    console.log(`🔄 Loaded command: ${command.default.data.name}`);
+  }
 }
 
-const rest = new REST({ version: '10' }).setToken(process.env.TOKEN)
+const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
 try {
-  console.log(`⏳ Pushing ${commands.length} slash command(s)...`)
+  console.log(`⏳ Pushing ${commands.length} slash command(s)...`);
+
   const data = await rest.put(
-    Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+    Routes.applicationGuildCommands(
+      process.env.CLIENT_ID,
+      process.env.GUILD_ID,
+    ),
     { body: commands },
-  )
-  console.log(`✅ Pushed ${data.length} command(s).`)
-} catch (err) {
-  console.error(err)
+  );
+  console.log(`✅ Pushed ${data.length} command(s).`);
+} catch (error) {
+  console.error(error);
 }
