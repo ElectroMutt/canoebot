@@ -56,6 +56,17 @@ export default {
       subcommand
         .setName("randomize")
         .setDescription("Randomize the order of all songs in the database"),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("import")
+        .setDescription("Import songs from a text file (one song per line)")
+        .addAttachmentOption((option) =>
+          option
+            .setName("file")
+            .setDescription("Text file with songs (one per line)")
+            .setRequired(true),
+        ),
     ),
 
   async execute(interaction) {
@@ -400,6 +411,51 @@ async function handleRandomize(interaction) {
     console.error("❌ Error randomizing songs:", error);
     await interaction.editReply({
       content: "Ay mate, there was an random error randomizing the songs.",
+    });
+  }
+}
+
+// take the old text file and add it db
+async function handleImport(interaction) {
+  const attachment = interaction.options.getAttachment("file");
+
+  if (!attachment.name.endsWith(".txt")) {
+    return interaction.reply({
+      content: "Ay mate, I can only accept a text file.",
+      ephemeral: true,
+    });
+  }
+
+  await interaction.deferReply();
+
+  try {
+    const response = await fetch(attachment.url);
+    const text = await response.text();
+    const lines = text.split(/\r?\n/).filter((line) => line.trim() !== "");
+
+    let addedCount = 0;
+    for (const line of lines) {
+      try {
+        db.songQueries.addSong.run(line.trim(), interaction.user.id);
+        addedCount++;
+      } catch (err) {
+        console.error(`❌ Error adding song "${line}":`, err);
+      }
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle("Songs Imported")
+      .setColor(0x00ff00)
+      .setDescription(
+        `Successfully imported **${addedCount}** songs from the file.`,
+      )
+      .setFooter({ text: `Imported by ${interaction.member.displayName}` });
+
+    await interaction.editReply({ embeds: [embed] });
+  } catch (error) {
+    console.error("❌ Error importing songs:", error);
+    await interaction.editReply({
+      content: "Ay mate, There was an error importing the songs.",
     });
   }
 }
