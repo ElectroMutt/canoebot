@@ -9,6 +9,20 @@ This bot is to handle canoe licenses, songs of the day, and memes of the week fo
 - **Song of the Day**: Daily song posting feature
 - **Meme of the Week**: Weekly meme competition with voting
 
+## Commands
+
+| Command               | Description                                          | Executable By  |
+| --------------------- | ---------------------------------------------------- | -------------- |
+| `/license`            | Returns canoe license card for the user.             | Everyone       |
+| `/membersync`         | Sync current members to the database.                | Administrators |
+| `/sotd add <text>`    | Add a song to the database.                          | Moderators     |
+| `/sotd delete <id>`   | Remove a song from the database by line identifier.  | Moderators     |
+| `/sotd import <.txt>` | Takes a text file and adds each line to the song db. | Moderators     |
+| `/sotd randomize`     | Randomizes the order of all songs in the database.   | Moderators     |
+| `/sotd viewday`       | Returns the song that is being posted.               | Moderators     |
+| `/sotd viewweek`      | Returns next 7 days of dongs to be posted.           | Moderators     |
+| `/sotd viewall`       | Brings up an interactive menu to manage all songs.   | Moderators     |
+
 ## Github Version Improvement
 
 The revision now utilizes a database instead of plain json files. When you run `/membersync`, it will:
