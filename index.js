@@ -97,7 +97,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
-  if (message.channel.id === memeChannelId && message.attachments.size > 0) {
+  if (message.channel.id === memeChannelId) {
+    if (message.attachments.size > 0 || message.content.includes("https://"))
     await message.react("🔺");
   }
 });
